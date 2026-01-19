@@ -17,6 +17,112 @@ Esta herramienta permite:
 - **Exportar a CSV** con formato personalizado
 - **Generar reportes** y dashboard de estadisticas de migracion
 
+## Flujo de Trabajo Paso a Paso
+
+### Paso 1: Preparar el Repositorio de Origen
+
+Antes de iniciar, asegurese de tener el repositorio de informes con la estructura correcta:
+
+```
+repositorio/
+├── paciente_001/
+│   ├── index.txt          # Metadatos del estudio
+│   ├── informe.pdf        # Informe radiologico principal
+│   ├── escaneado01.pdf    # Documentos escaneados (opcional)
+│   └── escaneado02.pdf
+├── paciente_002/
+│   ├── index.txt
+│   └── informe.pdf
+...
+```
+
+### Paso 2: Escanear e Indexar
+
+1. Abrir la aplicacion en `http://localhost:3000`
+2. En la pestana **Migracion**, hacer clic en **"Escanear Repositorio"**
+3. El sistema:
+   - Recorre todas las carpetas del repositorio
+   - Lee cada archivo `index.txt` y extrae los metadatos
+   - Identifica los PDFs asociados (informe principal + escaneados)
+   - Inserta los registros en la base de datos con estado **"pendiente"**
+4. El dashboard muestra el conteo de registros indexados
+
+### Paso 3: Revisar y Validar Registros
+
+1. En la tabla de registros, revisar los informes indexados
+2. Usar el filtro de estado para ver solo los **"pendientes"**
+3. Para cada registro:
+   - **Validar**: Si los datos son correctos, clic en "Validar" → cambia a estado **"validado"**
+   - **Rechazar**: Si hay errores, clic en "Rechazar" e ingresar el motivo → cambia a estado **"error"**
+4. Opcion rapida: **"Validar todos"** para aprobar todos los pendientes en lote
+
+### Paso 4: Convertir a DICOM (Dicomizar)
+
+1. Una vez validados los registros, hacer clic en **"Dicomizar"**
+2. El sistema:
+   - Toma los registros en estado **"validado"**
+   - Convierte cada PDF a formato DICOM (Encapsulated PDF)
+   - Genera archivos `.dcm` en la carpeta de salida configurada
+   - Nombra los archivos como: `AccessionNumber_RUT_nombrearchivo.dcm`
+   - Mantiene el mismo StudyInstanceUID para todos los archivos de un estudio
+   - Actualiza el estado a **"migrado"**
+3. Los archivos DICOM quedan listos para enviar al PACS
+
+### Paso 5: Verificar Resultados
+
+1. Ir a la pestana **Reportes**
+2. Revisar el dashboard:
+   - **Total Registros**: Cantidad total indexada
+   - **Migrados**: Cantidad convertida a DICOM exitosamente
+   - **Con Errores**: Cantidad con problemas
+   - **% Completado**: Progreso general
+3. Ver estadisticas de archivos:
+   - **Informes PDF**: Cantidad de informes principales
+   - **Docs Escaneados**: Cantidad de documentos adjuntos
+   - **Total Archivos**: Suma total de PDFs procesados
+
+### Paso 6: Exportar Reportes
+
+1. En la pestana **Reportes**, seccion "Descargar Reportes"
+2. Opciones disponibles:
+   - **Descargar Migrados (CSV)**: Solo registros migrados exitosamente
+   - **Descargar Errores (CSV)**: Solo registros con errores
+   - **Descargar Todo (CSV)**: Todos los registros
+3. El CSV incluye una fila por cada archivo:
+   - AccessionNumber, RUT, Nombre, Fecha
+   - Ruta del archivo, Tipo (informe/escaneado01/escaneado02...)
+   - SHA256, ExportadoPor, FechaExport
+
+### Paso 7: Enviar al PACS
+
+Los archivos DICOM generados en `DICOM_OUTPUT_PATH` estan listos para:
+- Enviar mediante DICOM C-STORE a un servidor PACS
+- Importar manualmente en el visor DICOM
+- Integrar con Mirth Connect u otro motor de integracion
+
+### Diagrama de Estados
+
+```
+┌──────────────┐    Escanear    ┌──────────────┐
+│  Repositorio │ ─────────────> │  PENDIENTE   │
+│   (PDFs)     │                └──────────────┘
+└──────────────┘                       │
+                                       │ Validar
+                                       ▼
+                               ┌──────────────┐
+                               │   VALIDADO   │
+                               └──────────────┘
+                                       │
+                          ┌────────────┴────────────┐
+                          │ Dicomizar               │ Rechazar
+                          ▼                         ▼
+                   ┌──────────────┐         ┌──────────────┐
+                   │   MIGRADO    │         │    ERROR     │
+                   │  (archivos   │         │  (mensaje)   │
+                   │    .dcm)     │         └──────────────┘
+                   └──────────────┘
+```
+
 ## Tecnologias
 
 - **Frontend**: Next.js 14 (App Router), React, TypeScript
